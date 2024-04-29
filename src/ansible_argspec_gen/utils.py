@@ -9,7 +9,6 @@ import re
 import shutil
 import sys
 import textwrap
-
 from ansible.module_utils.common import validation
 from ansible.plugins.loader import fragment_loader
 from ansible.utils import plugin_docs
@@ -118,7 +117,21 @@ def options_to_required_if(options):
     #   ]
     return [(n, v, tuple(r)) for (n, v), r in sorted(requirements.items())]
 
-
+def options_to_required_one_of(options):
+    # Currently, we do not recurse into suboptions because required_one_of is not
+    # that powerfull.
+    requirements = set()
+    # Match things like "required one of I(state) is C(present)"
+    pattern = re.compile(r"[Rr]equired if I\(([^\)]+)\) is not set")
+    for name, data in options.items():
+        for desc in data["description"]:
+            match = pattern.search(desc)
+            if not match:
+                continue
+            sorted_tuple = tuple(sorted((name, match[1])))
+            if sorted_tuple not in requirements:
+                requirements.add(sorted_tuple)
+    return sorted(requirements)
 def options_to_mutually_exclusive(options):
     # Currently, we do not recurse into suboptions because mutually_exclusive
     # is not that powerfull.
@@ -152,6 +165,7 @@ def load_parameters(path):
         argument_spec=options_to_spec(docs["options"]),
         required_if=options_to_required_if(docs["options"]),
         mutually_exclusive=options_to_mutually_exclusive(docs["options"]),
+        required_one_of=options_to_required_one_of(docs["options"]),
     )
     return {k: v for k, v in params.items() if v}
 
